@@ -1,3 +1,6 @@
+'''
+python3 train_powr.py --env MountainCar-v0 --seed 0 --project powr --la 1e-6 --eta 0.1 --gamma 0.99 --n-train-episodes 1 --n-subsamples 10000 --n-iter-pmd 1 -nwe 1
+'''
 
 from powr.FasterNyMDPManager import FasterNyMDPManager
 
@@ -7,6 +10,7 @@ import time
 import gymnasium as gym
 import jax.numpy as jnp
 import jax
+from tqdm import tqdm
 
 from utils.utils import *
 import argparse
@@ -22,7 +26,7 @@ jax.config.update("jax_enable_x64", True)
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env', default="MountainCar-v0", type=str, help='Train gym env [Hopper-v3, ...]')
+    parser.add_argument('--env', default="Taxi-v3", type=str, help='Train gym env [Hopper-v3, ...]')
     parser.add_argument('--group', default=None, type=str, help='Wandb run group')
     parser.add_argument('--project', default=None, type=str, help='Wandb project')
     parser.add_argument('--la', default=1e-6, type=float, help='')
@@ -39,7 +43,7 @@ def parse_args():
     parser.add_argument('--save-gif-every', '-sge', default=5, type=int, help='Save gif every <save-gif-every> epochs')
     parser.add_argument('--notes', default=None, type=str, help='Wandb notes')
     parser.add_argument('--tags', '--wandb-tags', type=str, default=[], nargs="+", help="Tags for wandb run, e.g.: --tags optimized pr-123")
-    parser.add_argument('--offline', default=True, action='store_true', help='Offline run without wandb')
+    parser.add_argument('--offline', default=False, action='store_true', help='Offline run without wandb')
     args = parser.parse_args()
     args.algo = 'powr'
  
@@ -84,7 +88,7 @@ class abel_kernel_diag:
 
 if __name__ == '__main__':
     args = parse_args()
-    args.tags.append("SoftMax Param")
+    # args.tags.append("SoftMax Param")
     pprint(vars(args))
     random_string = get_random_string(5)
     current_date = datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
@@ -254,7 +258,7 @@ if __name__ == '__main__':
         writer.add_scalar("Epoch and warmup ", i + n_warmup_episodes, global_step)  
         # x massima 
         if i % save_gif_every == 0:
-            _, gif = mdp_manager.run(1, plot=True, collect_data=False, path = run_name)
+            _, gif = mdp_manager.run(1, plot=True, collect_data=False, path = run_name, seed = args.seed)
 
             if args.offline is not True:
                 wandb.log({"Epoch": global_step, "video": wandb.Video(run_name+"/"+gif)})
