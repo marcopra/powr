@@ -182,7 +182,6 @@ class FasterNyMDPManager:
                 pi = [round(float(p), 3) for p in pi.squeeze()]
 
                 new_state, reward, terminated, truncated, info = self.env.step(action)
-                print(state, action, "->", new_state, reward, terminated, truncated )
                 
                 # new_state[0] = round(new_state[0], 1)
                 # new_state[1] = round(new_state[1], 2)
@@ -234,6 +233,7 @@ class FasterNyMDPManager:
 
 
                     break
+
         if collect_data:
             f_X = jnp.array(f_X)
             f_Y_transitions = jnp.array(f_Y_transitions)
