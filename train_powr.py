@@ -31,7 +31,6 @@ def parse_args():
     parser.add_argument('--sigma', default=0.2, type=float, help='')
     parser.add_argument('--n-warmup-episodes', '-nwe', default=1, type=int, help='Number of warmups epochs for initializing the P i.e. (transition probability) and Q matrices')
     parser.add_argument('--n-epochs', '-ne', default=200, type=int, help='Number of training epochs')
-    # parser.add_argument('--timesteps', '-t', type=int, default=500_000,help="total timesteps of the experiments") # TODO NOT USED AT THE MOMENT
     parser.add_argument('--n-train-episodes', '-nte', default=1, type=int, help='Number of samples used to update matrix parameters')
     parser.add_argument('--n-subsamples', '-ns', default=10000, type=int, help='Number of subsamples for nystrom kernel')
     parser.add_argument('--n-iter-pmd', '-nipmd', default=1, type=int, help='Number of iteration to update policy parameters in an off-policy manner')
@@ -40,11 +39,9 @@ def parse_args():
     parser.add_argument('--save-gif-every', '-sge', default=5, type=int, help='Save gif every <save-gif-every> epochs')
     parser.add_argument('--notes', default=None, type=str, help='Wandb notes')
     parser.add_argument('--tags', '--wandb-tags', type=str, default=[], nargs="+", help="Tags for wandb run, e.g.: --tags optimized pr-123")
-    parser.add_argument('--offline', default=False, action='store_true', help='Offline run without wandb')
-    # parser.add_argument('--video', '-v', default=False, action='store_true', help='Video recording of evaluation during training')
+    parser.add_argument('--offline', default=True, action='store_true', help='Offline run without wandb')
     args = parser.parse_args()
-    args.algo = 'fast_nymd'
-    # args.n_epochs=int(args.timesteps//args.n_train_episodes)
+    args.algo = 'powr'
  
     return args
 
@@ -91,15 +88,14 @@ if __name__ == '__main__':
     pprint(vars(args))
     random_string = get_random_string(5)
     current_date = datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
-    run_name = "runs/"+str(args.env)+"/"+ "fast_nymd" +"/" +get_run_name(args, current_date)+"_"+random_string+"/"
+    run_name = "runs/"+str(args.env)+"/"+ args.algo +"/" +get_run_name(args, current_date)+"_"+random_string+"/"
     create_dirs(run_name)
     save_config(vars(args), run_name)
 
     try:
         wandb.init(config=vars(args),
-                project=("NY_md_hyperparams" if args.project is None else args.project) , #"NY_md_hyperparams",
-                # entity="iit_policy_gradient_methods",
-                group=(f"{args.env}/fast_nymd" if args.group is None else args.group),
+                project=("powr" if args.project is None else args.project) ,
+                group=(f"{args.env}/{args.algo}" if args.group is None else args.group),
                 name=str(current_date)+"_"+str(args.env)+"_"+args.algo+"_eta"+str(args.eta)+"_la"+str(args.la)+"_train_samples" + str(args.n_train_episodes)+ "_n_pmd"+str(args.n_iter_pmd)+"_seed"+str(args.seed) + "_"+random_string,
                 save_code=True,
                 sync_tensorboard=True,
@@ -110,8 +106,7 @@ if __name__ == '__main__':
     except:
         wandb.init(config=vars(args),
                 project=("NY_md_hyperparams" if args.project is None else args.project) ,
-                # entity="iit_policy_gradient_methods",
-                group=(f"{args.env}/fast_nymd" if args.group is None else args.group),
+                group=(f"{args.env}/{args.algo}" if args.group is None else args.group),
                 name=str(current_date)+"_"+str(args.env)+"_"+args.algo+"_eta"+str(args.eta)+"_la"+str(args.la)+"_train_samples" + str(args.n_train_episodes)+ "_n_pmd"+str(args.n_iter_pmd)+"_seed"+str(args.seed) + "_"+random_string,
                 save_code=True,
                 sync_tensorboard=True,
@@ -140,12 +135,10 @@ if __name__ == '__main__':
 
     save_gif_every = args.save_gif_every
 
-    la = args.la ##
+    la = args.la
     eta = args.eta
     gamma = args.gamma
     sigma = args.sigma
-
-
 
 
     plot_test = True
@@ -154,12 +147,6 @@ if __name__ == '__main__':
     is_slippery = False
     env_name = args.env
 
-    # env_name = "FrozenLake-v1"
-    # env_name = "LunarLander-v2"
-    # env_name = "Taxi-v3"
-    # env_name = "MountainCar-v0"
-    # env_name = "CartPole-v1"
-    # env_name = "Pendulum-v1"
 
     if env_name == "Taxi-v3":
             env = gym.make('Taxi-v3', render_mode="rgb_array")
@@ -176,15 +163,8 @@ if __name__ == '__main__':
             # kernel = gaussian_kernel(sigma)
     elif env_name == "MountainCar-v0":
             env = gym.make('MountainCar-v0', render_mode="rgb_array")
-            # sigma_mc = [0.05, 0.005]
-            # sigma_mc = [0.05, 0.001]
-            # sigma_mc = [0.01, 0.001]
-            # sigma_mc = [0.001, 0.0005]
             sigma_mc = [0.1, 0.01]
-            # sigma_mc = [0.1, 0.01]
-            # sigma_mc = [0.0001, 0.00001]
             kernel = gaussian_kernel_diag(sigma_mc)
-            # kernel = abel_kernel_diag(sigma_mc)
     elif env_name == "CartPole-v1":
             env = gym.make('CartPole-v1', render_mode="rgb_array")
             kernel = gaussian_kernel(sigma)
@@ -195,12 +175,14 @@ if __name__ == '__main__':
         print(f"Unknown environment: {env_name}")
         raise ValueError()
 
-
     def to_be_jit_kernel(X, Y):
         return kernel(X, Y)
 
     jit_kernel = jax.jit(to_be_jit_kernel)
     v_jit_kernel = jax.vmap(jit_kernel)
+
+    # ** Seed Settings**
+    set_seed(args.seed)
 
     if load_mdp_manager:
         with open("saves/mdp_manager.pickle", "rb") as f:
@@ -209,7 +191,6 @@ if __name__ == '__main__':
         mdp_manager = FasterNyMDPManager(env, eta=eta, la=la, kernel=jit_kernel, gamma=gamma, n_subsamples=n_subsamples,
                                 vkernel=v_jit_kernel)
 
-
         if n_warmup_episodes>0:
             if n_warmup_episodes < 10:
                 batch_size = n_warmup_episodes
@@ -217,7 +198,7 @@ if __name__ == '__main__':
                 batch_size = min(int(n_warmup_episodes/10), 100)
             for i in range(0, n_warmup_episodes, batch_size):
                 print(f"Collecting data: {i}/{n_warmup_episodes}")
-                _, timesteps = mdp_manager.run(batch_size, plot=False, collect_data=True)
+                _, timesteps = mdp_manager.run(batch_size, plot=False, collect_data=True, seed = args.seed)
                 print(f"n_points: {mdp_manager.FTL.n}")
 
                 if simplify:
@@ -245,13 +226,13 @@ if __name__ == '__main__':
 
         if n_test_episodes > 0:
             print("Starting test")
-            test_result = mdp_manager.run(n_test_episodes, plot=False, collect_data=False)
+            test_result = mdp_manager.run(n_test_episodes, plot=False, collect_data=False, seed = args.seed)
             print("Test results:", test_results_list)
 
         print("Before", mdp_manager.FTL.n)
         print(f"Collecting data: {i*n_train_episodes + n_warmup_episodes}/{n_train_episodes*n_epochs + n_warmup_episodes}")
         
-        train_result, timesteps = mdp_manager.run(n_train_episodes, plot=False, collect_data=True)
+        train_result, timesteps = mdp_manager.run(n_train_episodes, plot=False, collect_data=True, seed=args.seed)
         total_timesteps+=timesteps
         
 

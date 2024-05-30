@@ -156,7 +156,8 @@ class FasterNyMDPManager:
 
 
 
-    def run(self, n_episodes=1, plot=False, collect_data=False, path = None):
+    def run(self, n_episodes=1, plot=False, collect_data=False, path = None, seed = None):
+        assert seed is not None, f"Use a seed for reproducible experiments"
         total_timesteps = 0
         if collect_data:
             f_X = []
@@ -166,7 +167,7 @@ class FasterNyMDPManager:
 
         cum_rewards = np.zeros(n_episodes)
         for episode_id in range(n_episodes):
-            state, info = self.env.reset()
+            state, info = self.env.reset(seed = seed) # Important to seed here
 
             # truncate the state to its 3rd decimal
             # state[0] = round(state[0], 1)
@@ -181,6 +182,7 @@ class FasterNyMDPManager:
                 pi = [round(float(p), 3) for p in pi.squeeze()]
 
                 new_state, reward, terminated, truncated, info = self.env.step(action)
+                print(state, action, "->", new_state, reward, terminated, truncated )
                 
                 # new_state[0] = round(new_state[0], 1)
                 # new_state[1] = round(new_state[1], 2)
@@ -232,7 +234,6 @@ class FasterNyMDPManager:
 
 
                     break
-
         if collect_data:
             f_X = jnp.array(f_X)
             f_Y_transitions = jnp.array(f_Y_transitions)
