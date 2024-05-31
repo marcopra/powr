@@ -1,6 +1,3 @@
-
-
-
 import matplotlib.pyplot as plt
 import imageio
 import cv2
@@ -14,6 +11,7 @@ from powr.FasterNyIncrementalRLS import FasterNyIncrementalRLS
 from powr.FastQmodel import FastQmodel
 import wandb
 
+
 class softmax:
 
     def __init__(self):
@@ -25,8 +23,18 @@ class softmax:
 
 class FasterNyMDPManager:
 
-    def __init__(self, env, gamma=0.95, eta=1, la=1e-3, kernel=None, n_subsamples=None, plotting=False, eps_softmax=1e-9,
-                 vkernel=None):
+    def __init__(
+        self,
+        env,
+        gamma=0.95,
+        eta=1,
+        la=1e-3,
+        kernel=None,
+        n_subsamples=None,
+        plotting=False,
+        eps_softmax=1e-9,
+        vkernel=None,
+    ):
 
         assert kernel is not None
         assert n_subsamples is not None
@@ -55,12 +63,16 @@ class FasterNyMDPManager:
 
         self.action_one_hot = jnp.eye(self.n_actions)
 
-
         self.softmax = softmax()
 
         self.f_cumQ_weights = None
         self.f_Q_mask = None
-        self.FTL = FasterNyIncrementalRLS(kernel=self.kernel, n_actions=self.n_actions, la=self.la, n_subsamples=self.n_subsamples)
+        self.FTL = FasterNyIncrementalRLS(
+            kernel=self.kernel,
+            n_actions=self.n_actions,
+            la=self.la,
+            n_subsamples=self.n_subsamples,
+        )
 
     def check_data_collected_but_not_trained(self):
         assert not self._DATA_COLLECTED_BUT_NOT_TRAINED
@@ -71,10 +83,15 @@ class FasterNyMDPManager:
 
         assert self.f_cumQ_weights is not None
 
-        f_exponents = self.f_prev_exponents + self.eta * self.FTL.K_transitions_sub @ self.f_cumQ_weights
+        f_exponents = (
+            self.f_prev_exponents
+            + self.eta * self.FTL.K_transitions_sub @ self.f_cumQ_weights
+        )
         f_pi = self.softmax(f_exponents)
 
-        pPit = self.FTL.K_transitions_sub.reshape(self.FTL.n,self.FTL.n_sub,1) * f_pi.reshape(self.FTL.n,1 ,self.n_actions)
+        pPit = self.FTL.K_transitions_sub.reshape(
+            self.FTL.n, self.FTL.n_sub, 1
+        ) * f_pi.reshape(self.FTL.n, 1, self.n_actions)
         pPit = pPit[:, jnp.arange(self.FTL.n_sub), self.FTL.A_sub]
         f_big_M = jnp.eye(self.FTL.n_sub) - (self.gamma) * self.FTL.B @ pPit
         # f_big_M = 1. *  jnp.eye(self.FTL.n_sub) - (self.gamma) * self.FTL.B @ (self.FTL.K_transitions_sub * f_pi.reshape(-1,1))
@@ -93,11 +110,12 @@ class FasterNyMDPManager:
         #     # print(step_val)
         current_q_vals = self.FTL.K_transitions_sub @ (f_tmp_Q * self.f_Q_mask)
         tmp_exp = self.eta * current_q_vals
-        if (tmp_exp>0).any():
-            print(f"Max: {tmp_exp.max()} [WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING]")
+        if (tmp_exp > 0).any():
+            print(
+                f"Max: {tmp_exp.max()} [WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING]"
+            )
 
         self.f_cumQ_weights += f_tmp_Q * self.f_Q_mask
-
 
     def evaluate_pi(self, state):
 
@@ -106,8 +124,11 @@ class FasterNyMDPManager:
 
         jnp_state = jnp.array(state).reshape(1, -1)
 
-
-        exponent = self.eta * self.FTL.kernel(jnp.array(state).reshape(1,-1), self.FTL.X_sub) @ self.f_cumQ_weights
+        exponent = (
+            self.eta
+            * self.FTL.kernel(jnp.array(state).reshape(1, -1), self.FTL.X_sub)
+            @ self.f_cumQ_weights
+        )
         for model in self.f_prev_cumQ_models:
             exponent += model.evaluate(jnp_state)
 
@@ -118,12 +139,11 @@ class FasterNyMDPManager:
 
         return pi
 
-
     def sample_action(self, state):
 
         p = self.evaluate_pi(state)
 
-        p = np.asarray(p).astype('float64')
+        p = np.asarray(p).astype("float64")
         p = p.squeeze()
         p = p / p.sum()
         try:
@@ -134,29 +154,38 @@ class FasterNyMDPManager:
 
         return action, p
 
-
     def delete_Q_memory(self):
         self.f_prev_cumQ_models = []
         self.f_prev_exponents = None
 
     def reset_Q(self):
 
-        self.f_prev_cumQ_models.append(FastQmodel(kernel=self.kernel, Q=self.eta * self.f_cumQ_weights, X_sub=self.FTL.X_sub))
+        self.f_prev_cumQ_models.append(
+            FastQmodel(
+                kernel=self.kernel,
+                Q=self.eta * self.f_cumQ_weights,
+                X_sub=self.FTL.X_sub,
+            )
+        )
 
-        new_FTL = FasterNyIncrementalRLS(kernel=self.kernel, n_actions=self.n_actions, la=self.la, n_subsamples=self.n_subsamples)
-        new_FTL.collect_data(self.FTL.A, self.FTL.X, self.FTL.Y_transitions, self.FTL.Y_rewards)
+        new_FTL = FasterNyIncrementalRLS(
+            kernel=self.kernel,
+            n_actions=self.n_actions,
+            la=self.la,
+            n_subsamples=self.n_subsamples,
+        )
+        new_FTL.collect_data(
+            self.FTL.A, self.FTL.X, self.FTL.Y_transitions, self.FTL.Y_rewards
+        )
         self.FTL = new_FTL
 
         self.f_cumQ_weights = None
-
 
     def subsample(self):
 
         self.FTL.subsample()
 
-
-
-    def run(self, n_episodes=1, plot=False, collect_data=False, path = None, seed = None):
+    def run(self, n_episodes=1, plot=False, collect_data=False, path=None, seed=None):
         assert seed is not None, f"Use a seed for reproducible experiments"
         total_timesteps = 0
         if collect_data:
@@ -167,7 +196,7 @@ class FasterNyMDPManager:
 
         cum_rewards = np.zeros(n_episodes)
         for episode_id in range(n_episodes):
-            state, info = self.env.reset(seed = seed) # Important to seed here
+            state, info = self.env.reset(seed=seed)  # Important to seed here
 
             # truncate the state to its 3rd decimal
             # state[0] = round(state[0], 1)
@@ -176,16 +205,15 @@ class FasterNyMDPManager:
             images = []
             while True:
                 action, pi = self.sample_action(state)
-                total_timesteps+=1
+                total_timesteps += 1
 
                 # save pi from jax vector into a list of floats (truncated at the third decimal)
                 pi = [round(float(p), 3) for p in pi.squeeze()]
 
                 new_state, reward, terminated, truncated, info = self.env.step(action)
-                
+
                 # new_state[0] = round(new_state[0], 1)
                 # new_state[1] = round(new_state[1], 2)
-
 
                 cum_rewards[episode_id] += reward
 
@@ -195,22 +223,30 @@ class FasterNyMDPManager:
                     f_Y_rewards.append(reward)
                     f_A.append(action)
 
-
-
                 # update the state
                 state = new_state
 
                 if self.plotting or plot:
                     img = self.env.render()
                     # write the action on the right left corner of the image (in green) font 16 and thickness 2
-                    img = cv2.putText(img, f"Action: {action} - Pi: {pi}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1,
-                                      (0, 255, 0), 2, cv2.LINE_AA)
+                    img = cv2.putText(
+                        img,
+                        f"Action: {action} - Pi: {pi}",
+                        (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 255, 0),
+                        2,
+                        cv2.LINE_AA,
+                    )
                     images.append(img)
 
                 if terminated or truncated:
                     # if the episode terminated, record the last state as a sink state
                     if terminated:
-                        print("[TRAIN] !!!!!! TERMINATED !!!!! ", cum_rewards[episode_id])
+                        print(
+                            "[TRAIN] !!!!!! TERMINATED !!!!! ", cum_rewards[episode_id]
+                        )
 
                         if collect_data:
                             end_reward = 0
@@ -220,17 +256,17 @@ class FasterNyMDPManager:
                             f_Y_rewards.append(end_reward)
                             f_A.append(action)
 
-
                     if self.plotting or plot:
                         # save gif as a fast frame rate
-                        print(f"Episode {episode_id} - Reward: {cum_rewards[episode_id]}")
+                        print(
+                            f"Episode {episode_id} - Reward: {cum_rewards[episode_id]}"
+                        )
                         gif_name = f"{time.time()}-reward-{cum_rewards[episode_id]}.gif"
                         if path is None:
-                            imageio.mimsave(f'./gifs/tmp/{gif_name}', images)
+                            imageio.mimsave(f"./gifs/tmp/{gif_name}", images)
                         else:
-                            imageio.mimsave(f'{path}/{gif_name}', images)
+                            imageio.mimsave(f"{path}/{gif_name}", images)
                         print("Saving gif")
-
 
                     break
 
@@ -240,7 +276,9 @@ class FasterNyMDPManager:
             f_Y_rewards = jnp.array(f_Y_rewards).reshape(-1, 1)
             f_A = jnp.array(f_A)
 
-            self.FTL.collect_data(f_A, f_X, f_Y_transitions, f_Y_rewards, print_error=True)
+            self.FTL.collect_data(
+                f_A, f_X, f_Y_transitions, f_Y_rewards, print_error=True
+            )
 
             self._DATA_COLLECTED_BUT_NOT_TRAINED = True
         if self.plotting or plot:
@@ -250,13 +288,9 @@ class FasterNyMDPManager:
 
         return cum_rewards.mean()
 
-
-
-
     def simplify(self):
         self.TransitionLearner.simplify()
         print(f"Sizes: {[l for l in self.TransitionLearner.n]}")
-
 
     def train(self):
 
@@ -275,7 +309,9 @@ class FasterNyMDPManager:
             self.f_prev_exponents += model.evaluate(self.FTL.Y_transitions)
 
         if self.f_prev_exponents.max() > 0:
-            print(f"Max={self.f_prev_exponents.max()} [WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING]")
+            print(
+                f"Max={self.f_prev_exponents.max()} [WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING][WARNING]"
+            )
 
         self._DATA_COLLECTED_BUT_NOT_TRAINED = False
 

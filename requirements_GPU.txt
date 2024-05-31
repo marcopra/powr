@@ -1,6 +1,6 @@
 gymnasium==0.29.1
 imageio==2.34.0
-jax[cpu]==0.4.28
+jax[cuda12]==0.4.28
 matplotlib==3.7.5
 opencv_python==4.9.0.80
 torch==2.2.2

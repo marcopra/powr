@@ -24,7 +24,7 @@ Our release is **under construction**, you can track its progress below:
 
 1. Install POWR dependences:
 ```
-conda create -n powr python=3.8
+conda create -n powr python=3.11
 conda activate powr 
 pip install -r requirements.txt
 ```

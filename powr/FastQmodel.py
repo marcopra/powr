@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 
+
 class FastQmodel:
     def __init__(self, kernel=None, Q=None, X_sub=None):
 
@@ -10,7 +11,6 @@ class FastQmodel:
         self.kernel = kernel
         self.Q = Q
         self.X_sub = X_sub
-
 
     def evaluate(self, X=None):
         return self.kernel(X, self.X_sub) @ self.Q

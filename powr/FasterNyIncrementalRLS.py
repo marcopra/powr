@@ -4,9 +4,10 @@ import jax.random as jrandom
 import os
 import time
 
+
 @jax.jit
 def dirac_kernel(X, Y):
-    return ((X.reshape(-1, 1) - Y.reshape(1, -1)) == 0)*1.0
+    return ((X.reshape(-1, 1) - Y.reshape(1, -1)) == 0) * 1.0
 
 
 class FasterNyIncrementalRLS:
@@ -27,7 +28,6 @@ class FasterNyIncrementalRLS:
         self.n_sub = None
 
         self.reset()
-
 
     # verify that we have not called subsample yet
     def check_subsample(self):
@@ -50,7 +50,6 @@ class FasterNyIncrementalRLS:
 
         self._SUBSAMPLE_HAS_BEEN_CALLED = False
 
-
     def collect_data(self, A, X, Y_transitions, Y_rewards, print_error=False):
 
         if self.n == 0:
@@ -71,12 +70,14 @@ class FasterNyIncrementalRLS:
         if self._SUBSAMPLE_HAS_BEEN_CALLED:
             self.update_kernels(A, X, Y_transitions)
 
-
     def update_kernels(self, A, X, Y_transitions):
         Knew = self.kernel(jnp.vstack([X, Y_transitions]), self.X_sub)
-        self.K_full_sub = jnp.vstack([self.K_full_sub, Knew[:X.shape[0]] * dirac_kernel(A, self.A_sub)])
-        self.K_transitions_sub = jnp.vstack([self.K_transitions_sub, Knew[X.shape[0]:]])
-
+        self.K_full_sub = jnp.vstack(
+            [self.K_full_sub, Knew[: X.shape[0]] * dirac_kernel(A, self.A_sub)]
+        )
+        self.K_transitions_sub = jnp.vstack(
+            [self.K_transitions_sub, Knew[X.shape[0] :]]
+        )
 
     def simplify(self):
 
@@ -89,14 +90,15 @@ class FasterNyIncrementalRLS:
         if self.n == 0:
             return
 
-        seed = int.from_bytes(os.urandom(4), 'big')
+        seed = int.from_bytes(os.urandom(4), "big")
         key = jrandom.PRNGKey(seed)
-
 
         # if the number of points is smaller than the number of subsamples, we just use all the points
         self.sub_indices = jnp.arange(self.n)
         if self.n > self.n_subsamples:
-            self.sub_indices = jrandom.choice(key, int(self.n), (self.n_subsamples,), replace=False)
+            self.sub_indices = jrandom.choice(
+                key, int(self.n), (self.n_subsamples,), replace=False
+            )
         self.n_sub = self.sub_indices.shape[0]
 
         self.X_sub = self.X[self.sub_indices]
@@ -110,20 +112,33 @@ class FasterNyIncrementalRLS:
 
         self._SUBSAMPLE_HAS_BEEN_CALLED = True
 
-
     def train(self):
 
         if not self._SUBSAMPLE_HAS_BEEN_CALLED:
             self.subsample()
 
-        L = jax.lax.linalg.cholesky(self.K_full_sub.T @ self.K_full_sub + self.n * self.la * self.K_sub_sub
-                                    + 1e-6*jnp.eye(self.K_full_sub.shape[1]))
+        L = jax.lax.linalg.cholesky(
+            self.K_full_sub.T @ self.K_full_sub
+            + self.n * self.la * self.K_sub_sub
+            + 1e-6 * jnp.eye(self.K_full_sub.shape[1])
+        )
 
         if jnp.isnan(L).any():
             raise ValueError("Error: NaN in the results of the training for Chol")
 
-        W = jax.lax.linalg.triangular_solve(L, jax.lax.linalg.triangular_solve(L, jnp.hstack(
-            [self.K_full_sub.T, self.K_full_sub.T @ self.Y_rewards]), lower=True, left_side=True, transpose_a=False), lower=True, left_side=True, transpose_a=True)
+        W = jax.lax.linalg.triangular_solve(
+            L,
+            jax.lax.linalg.triangular_solve(
+                L,
+                jnp.hstack([self.K_full_sub.T, self.K_full_sub.T @ self.Y_rewards]),
+                lower=True,
+                left_side=True,
+                transpose_a=False,
+            ),
+            lower=True,
+            left_side=True,
+            transpose_a=True,
+        )
 
         self.r = W[:, -1].reshape(-1, 1)
         self.B = W[:, :-1]
