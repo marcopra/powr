@@ -3,22 +3,21 @@ python3 train_powr.py --env MountainCar-v0 --seed 0 --project powr --la 1e-6 --e
 """
 
 import argparse
-import os
 import pickle
+import socket
 import time
-import warnings
+from datetime import datetime
 from pprint import pprint
 
 import gymnasium as gym
 import jax
-import jax.numpy as jnp
-import torch
 import wandb
-from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
 from powr.FasterNyMDPManager import FasterNyMDPManager
-from utils.utils import *
+from powr.kernels import dirac_kernel, gaussian_kernel, gaussian_kernel_diag
+from powr.utils import create_dirs, get_random_string, save_config, set_seed
+
+# from torch.utils.tensorboard import SummaryWriter
 
 
 jax.config.update("jax_enable_x64", True)
@@ -27,13 +26,21 @@ jax.config.update("jax_enable_x64", True)
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--env", default="Taxi-v3", type=str, help="Train gym env [Hopper-v3, ...]"
+        "--env",
+        default="Taxi-v3",
+        type=str,
+        help="Train gym env [Taxi-v3, FrozenLake-v1, LunarLander-v2, MountainCar-v0, CartPole-v1, Pendulum-v1]",
     )
     parser.add_argument("--group", default=None, type=str, help="Wandb run group")
     parser.add_argument("--project", default=None, type=str, help="Wandb project")
-    parser.add_argument("--la", default=1e-6, type=float, help="")
     parser.add_argument(
-        "--eta", default=1, type=float, help="Similar to learning rate (???)"
+        "--la",
+        default=1e-6,
+        type=float,
+        help="Regularization for the action-value function estimators",
+    )
+    parser.add_argument(
+        "--eta", default=1, type=float, help="Step size of the Policy Mirror Descent"
     )
     parser.add_argument("--gamma", default=0.99, type=float, help="")
     parser.add_argument("--sigma", default=0.2, type=float, help="")
@@ -100,6 +107,42 @@ def parse_args():
     return args
 
 
+def parse_env(env_name, sigma):
+    if env_name == "Taxi-v3":
+        env = gym.make("Taxi-v3", render_mode="rgb_array")
+        kernel = dirac_kernel
+    elif env_name == "FrozenLake-v1":
+        env = gym.make(
+            "FrozenLake-v1",
+            desc=None,
+            map_name="4x4",
+            is_slippery=False,
+            render_mode="rgb_array",
+        )
+        kernel = dirac_kernel
+    elif env_name == "LunarLander-v2":
+        env = gym.make("LunarLander-v2", render_mode="rgb_array")
+        sigma_ll = [sigma for _ in range(6)]
+        # add another 2 elements to sigma equal to 0.001
+        sigma_ll += [0.0001, 0.0001]
+        kernel = gaussian_kernel_diag(sigma_ll)
+        # kernel = gaussian_kernel(sigma)
+    elif env_name == "MountainCar-v0":
+        env = gym.make("MountainCar-v0", render_mode="rgb_array")
+        sigma_mc = [0.1, 0.01]
+        kernel = gaussian_kernel_diag(sigma_mc)
+    elif env_name == "CartPole-v1":
+        env = gym.make("CartPole-v1", render_mode="rgb_array")
+        kernel = gaussian_kernel(sigma)
+    elif env_name == "Pendulum-v1":
+        env = gym.make("Pendulum-v1", g=9.81, render_mode="rgb_array")
+        kernel = gaussian_kernel(sigma)
+    else:
+        print(f"Unknown environment: {args.env}")
+        raise ValueError()
+    return env, kernel
+
+
 def get_run_name(args, current_date=None):
     if current_date is None:
         current_date = datetime.today().strftime("%Y_%m_%d_%H_%M_%S")
@@ -122,54 +165,6 @@ def get_run_name(args, current_date=None):
         + "_"
         + socket.gethostname()
     )
-
-
-# compute the dirac kernel on batches of states
-def dirac_kernel(X, Y):
-    return ((X.reshape(-1, 1) - Y.reshape(1, -1)) == 0) * 1.0
-
-
-# gaussian kernel for matrices of n points and d dimensions
-class gaussian_kernel:
-    def __init__(self, sigma):
-        self.sigma = sigma
-
-    def __call__(self, X, Y):
-        return jnp.exp(
-            -(1 / self.sigma)
-            * jnp.linalg.norm(
-                X.reshape(X.shape[0], 1, -1) - Y.reshape(1, Y.shape[0], -1), axis=2
-            )
-        )
-
-
-# gaussian kernel for matrices of n points and d dimension with a different sigma for each dimension
-class gaussian_kernel_diag:
-    def __init__(self, sigma):
-        self.sigma = jnp.array(sigma).reshape(1, 1, -1)
-
-    def __call__(self, X, Y):
-        return jnp.exp(
-            -jnp.sum(
-                (X.reshape(X.shape[0], 1, -1) - Y.reshape(1, Y.shape[0], -1)) ** 2
-                / (2 * self.sigma**2),
-                axis=2,
-            )
-        )
-
-
-class abel_kernel_diag:
-    def __init__(self, sigma):
-        self.sigma = jnp.array(sigma).reshape(1, 1, -1)
-
-    def __call__(self, X, Y):
-        return jnp.exp(
-            -jnp.sum(
-                jnp.abs(X.reshape(X.shape[0], 1, -1) - Y.reshape(1, Y.shape[0], -1))
-                / (jnp.sqrt(2) * self.sigma),
-                axis=2,
-            )
-        )
 
 
 if __name__ == "__main__":
@@ -252,12 +247,12 @@ if __name__ == "__main__":
         )
         args.offline = True
 
-    writer = SummaryWriter(f"{run_name}")
-    writer.add_text(
-        "hyperparameters",
-        "|param|value|\n|-|-|\n%s"
-        % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-    )
+    # writer = SummaryWriter(f"{run_name}")
+    # writer.add_text(
+    #     "hyperparameters",
+    #     "|param|value|\n|-|-|\n%s"
+    #     % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+    # )
 
     # ** Hyperparameters Settings **
     load_mdp_manager = False
@@ -274,46 +269,12 @@ if __name__ == "__main__":
     la = args.la
     eta = args.eta
     gamma = args.gamma
-    sigma = args.sigma
 
     plot_test = True
 
     simplify = False
-    is_slippery = False
-    env_name = args.env
 
-    if env_name == "Taxi-v3":
-        env = gym.make("Taxi-v3", render_mode="rgb_array")
-        kernel = dirac_kernel
-    elif env_name == "FrozenLake-v1":
-        env = gym.make(
-            "FrozenLake-v1",
-            desc=None,
-            map_name="4x4",
-            is_slippery=is_slippery,
-            render_mode="rgb_array",
-        )
-        kernel = dirac_kernel
-    elif env_name == "LunarLander-v2":
-        env = gym.make("LunarLander-v2", render_mode="rgb_array")
-        sigma_ll = [sigma for _ in range(6)]
-        # add another 2 elements to sigma equal to 0.001
-        sigma_ll += [0.0001, 0.0001]
-        kernel = gaussian_kernel_diag(sigma_ll)
-        # kernel = gaussian_kernel(sigma)
-    elif env_name == "MountainCar-v0":
-        env = gym.make("MountainCar-v0", render_mode="rgb_array")
-        sigma_mc = [0.1, 0.01]
-        kernel = gaussian_kernel_diag(sigma_mc)
-    elif env_name == "CartPole-v1":
-        env = gym.make("CartPole-v1", render_mode="rgb_array")
-        kernel = gaussian_kernel(sigma)
-    elif env_name == "Pendulum-v1":
-        env = gym.make("Pendulum-v1", g=9.81, render_mode="rgb_array")
-        kernel = gaussian_kernel(sigma)
-    else:
-        print(f"Unknown environment: {env_name}")
-        raise ValueError()
+    env, kernel = parse_env(args.env, args.sigma)
 
     def to_be_jit_kernel(X, Y):
         return kernel(X, Y)
@@ -351,7 +312,7 @@ if __name__ == "__main__":
                 print(f"n_points: {mdp_manager.FTL.n}")
 
                 if simplify:
-                    print(f"simplifying...")
+                    print("Simplifying")
                     mdp_manager.simplify()
 
         # # save the state of the system before training using pickle
@@ -390,25 +351,25 @@ if __name__ == "__main__":
         total_timesteps += timesteps
 
         if simplify:
-            print(f"simplifying...")
+            print("Simplifying")
             mdp_manager.simplify()
 
         print("Saving data ...")
         global_step = i
         # Record rewards and data for plotting purposes
-        writer.add_scalar("test reward", test_result, global_step)
-        writer.add_scalar("train reward", train_result, global_step)
-        writer.add_scalar(
-            "Sampling and Updating steps",
-            n_train_episodes + i * (n_train_episodes + n_iter_pmd),
-            global_step,
-        )
-        writer.add_scalar("Epoch", i, global_step)
-        writer.add_scalar(
-            "Train Episodes", n_warmup_episodes + i * n_train_episodes, global_step
-        )
-        writer.add_scalar("timestep", total_timesteps, global_step)
-        writer.add_scalar("Epoch and warmup ", i + n_warmup_episodes, global_step)
+        # writer.add_scalar("test reward", test_result, global_step)
+        # writer.add_scalar("train reward", train_result, global_step)
+        # writer.add_scalar(
+        #     "Sampling and Updating steps",
+        #     n_train_episodes + i * (n_train_episodes + n_iter_pmd),
+        #     global_step,
+        # )
+        # writer.add_scalar("Epoch", i, global_step)
+        # writer.add_scalar(
+        #     "Train Episodes", n_warmup_episodes + i * n_train_episodes, global_step
+        # )
+        # writer.add_scalar("timestep", total_timesteps, global_step)
+        # writer.add_scalar("Epoch and warmup ", i + n_warmup_episodes, global_step)
         # x massima
         if i % save_gif_every == 0:
             _, gif = mdp_manager.run(
