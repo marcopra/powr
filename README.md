@@ -11,15 +11,16 @@ This repository contains the code for the paper "Operator World Models for Reinf
 
 Our release is **under construction**, you can track its progress below:
 
-- [ ] Installation instructions
+- [x] Installation instructions
 - [ ] Code implementation
+	- [x] Training
+	- [x] Testing
 	- [ ] Optimization
-	- [ ] training
-	- [ ] testing
 	- [ ] Model saving and loading
-- [ ] Reproducing Results
-- [ ] Hyperparameters
+- [ ] Reproducing Results Scripts
+- [ ] Hyperparameters for each env
 - [ ] Trained models
+- [ ] Complete the README
 
 ## Installation
 
@@ -30,20 +31,12 @@ conda activate powr
 pip install -r requirements.txt
 ```
 
-2. (optional) set up `wandb login` with your WeightsAndBiases account. If you do not wish to use wandb to track the experiment results, ...  
+2. (optional) set up `wandb login` with your WeightsAndBiases account. If you do not wish to use wandb to track the experiment results, run it offline adding the following arg `--offline`. For example, `python3 train_powr.py --offline`
 
 ## Getting started
 
 ### Quick test
 - `python3 train_powr.py`
-
-### Reproduce paper results
-
-
-#### POWR
-- MountainCar: `python3 train_powr.py --env MountainCar-v0 --seed 0 --project powr --la 1e-6 --eta 0.1 --gamma 0.99 --n-train-episodes 1 --n-subsamples 10000 --n-iter-pmd 1 -nwe 1`
-- Taxi: ``
-- FrozenLake: ``
 
 ## Cite us
 If you use this repository, please consider citing

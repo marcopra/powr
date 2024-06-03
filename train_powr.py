@@ -271,7 +271,6 @@ if __name__ == "__main__":
     gamma = args.gamma
 
     save_gif_every = args.save_gif_every
-    load_mdp_manager = args.load_path
 
     simplify = False
 
