@@ -50,7 +50,7 @@ class FasterNyIncrementalRLS:
 
         self._SUBSAMPLE_HAS_BEEN_CALLED = False
 
-    def collect_data(self, A, X, Y_transitions, Y_rewards, print_error=False):
+    def collect_data(self, A, X, Y_transitions, Y_rewards):
 
         if self.n == 0:
             self.A = A

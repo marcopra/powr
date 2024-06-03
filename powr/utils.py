@@ -4,6 +4,7 @@ import random
 import socket
 import string
 from datetime import datetime
+from tabulate import tabulate
 
 import jax
 import numpy as np
@@ -81,3 +82,47 @@ def get_learning_rate(args, env):
             return env.get_attr("preferred_lr")[0]
     else:
         return args.lr
+
+
+def log_epoch_statistics(writer, log_file, epoch, test_result, train_result, n_train_episodes,
+                         n_iter_pmd, n_warmup_episodes, total_timesteps, 
+                         t_sampling, t_pmd, t_test, execution_time
+                         ):
+    # Log to Tensorboard
+    global_step = epoch
+    writer.add_scalar("test reward", test_result, global_step)
+    writer.add_scalar("train reward", train_result, global_step)
+    writer.add_scalar(
+        "Sampling and Updating steps",
+        n_train_episodes + epoch * (n_train_episodes + n_iter_pmd),
+        global_step,
+    )
+    writer.add_scalar("Epoch", epoch, global_step)
+    writer.add_scalar(
+        "Train Episodes", n_warmup_episodes + epoch * n_train_episodes, global_step
+    )
+    writer.add_scalar("timestep", total_timesteps, global_step)
+    writer.add_scalar("Epoch and warmup ", epoch + n_warmup_episodes, global_step)
+
+    # Prepare tabulate table
+    table = []
+    fancy_float = lambda f : f"{f:.3f}"
+    table.extend([
+        ["Epoch", epoch],
+        ["Train reward", fancy_float(train_result)],
+        ["Test reward", fancy_float(test_result)],
+        ["Total timesteps", total_timesteps],
+        ["Sampling time (s)", fancy_float(t_sampling)],
+        ["PMD time (s)", fancy_float(t_pmd)],
+        ["Test time (s)", fancy_float(t_test)],
+        ["Execution time (s)", fancy_float(execution_time)],
+    ])
+
+
+    fancy_grid = tabulate(table, headers="firstrow", tablefmt="fancy_grid", numalign='right')
+  
+    # Log to stdout and log file
+    log_file.write("\n")
+    log_file.write(fancy_grid)
+    log_file.flush()
+    print(fancy_grid)

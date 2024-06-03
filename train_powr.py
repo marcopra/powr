@@ -1,35 +1,35 @@
 """
 python3 train_powr.py --env MountainCar-v0 --seed 0 --project powr --la 1e-6 --eta 0.1 --gamma 0.99 --n-train-episodes 1 --n-subsamples 10000 --n-iter-pmd 1 -nwe 1
 """
-
-import argparse
+import os
+import jax
+import time
+import wandb
 import pickle
 import socket
-import time
-from datetime import datetime
-from pprint import pprint
-
+import argparse
+import warnings
 import gymnasium as gym
-import jax
-import wandb
+from tqdm import TqdmExperimentalWarning
+warnings.filterwarnings("ignore", category=TqdmExperimentalWarning) # Remove experimental warning
+from tqdm.rich import tqdm
+from pprint import pprint
+from datetime import datetime
+from tensorboardX import SummaryWriter
 
 from powr.FasterNyMDPManager import FasterNyMDPManager
 from powr.kernels import dirac_kernel, gaussian_kernel, gaussian_kernel_diag
-from powr.utils import create_dirs, get_random_string, save_config, set_seed
-
-# from torch.utils.tensorboard import SummaryWriter
-
+from powr.utils import create_dirs, get_random_string, save_config, set_seed, log_epoch_statistics
 
 jax.config.update("jax_enable_x64", True)
-
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--env",
-        default="Taxi-v3",
+        default="MountainCar-v0",
         type=str,
-        help="Train gym env [Taxi-v3, FrozenLake-v1, LunarLander-v2, MountainCar-v0, CartPole-v1, Pendulum-v1]",
+        help="Train gym env [LunarLander-v2, MountainCar-v0, CartPole-v1, Pendulum-v1]",
     )
     parser.add_argument("--group", default=None, type=str, help="Wandb run group")
     parser.add_argument("--project", default=None, type=str, help="Wandb project")
@@ -82,7 +82,7 @@ def parse_args():
     parser.add_argument(
         "--save-gif-every",
         "-sge",
-        default=5,
+        default=None,
         type=int,
         help="Save gif every <save-gif-every> epochs",
     )
@@ -94,6 +94,13 @@ def parse_args():
         default=[],
         nargs="+",
         help="Tags for wandb run, e.g.: --tags optimized pr-123",
+    )
+    parser.add_argument(
+        "--load-path",
+        default=None,
+        type=str,
+        help="Folder Path for loading model from a previous run",
+       
     )
     parser.add_argument(
         "--offline",
@@ -111,6 +118,7 @@ def parse_env(env_name, sigma):
     if env_name == "Taxi-v3":
         env = gym.make("Taxi-v3", render_mode="rgb_array")
         kernel = dirac_kernel
+
     elif env_name == "FrozenLake-v1":
         env = gym.make(
             "FrozenLake-v1",
@@ -120,26 +128,29 @@ def parse_env(env_name, sigma):
             render_mode="rgb_array",
         )
         kernel = dirac_kernel
+
     elif env_name == "LunarLander-v2":
         env = gym.make("LunarLander-v2", render_mode="rgb_array")
         sigma_ll = [sigma for _ in range(6)]
-        # add another 2 elements to sigma equal to 0.001
         sigma_ll += [0.0001, 0.0001]
         kernel = gaussian_kernel_diag(sigma_ll)
-        # kernel = gaussian_kernel(sigma)
+
     elif env_name == "MountainCar-v0":
         env = gym.make("MountainCar-v0", render_mode="rgb_array")
         sigma_mc = [0.1, 0.01]
         kernel = gaussian_kernel_diag(sigma_mc)
+
     elif env_name == "CartPole-v1":
         env = gym.make("CartPole-v1", render_mode="rgb_array")
         kernel = gaussian_kernel(sigma)
+
     elif env_name == "Pendulum-v1":
         env = gym.make("Pendulum-v1", g=9.81, render_mode="rgb_array")
         kernel = gaussian_kernel(sigma)
+
     else:
-        print(f"Unknown environment: {args.env}")
-        raise ValueError()
+        raise ValueError(f"Unknown environment: {args.env}")
+    
     return env, kernel
 
 
@@ -168,8 +179,9 @@ def get_run_name(args, current_date=None):
 
 
 if __name__ == "__main__":
+    # ** Run Settings **
+    # Parse arguments
     args = parse_args()
-    # args.tags.append("SoftMax Param")
     pprint(vars(args))
     random_string = get_random_string(5)
     current_date = datetime.today().strftime("%Y_%m_%d_%H_%M_%S")
@@ -187,6 +199,7 @@ if __name__ == "__main__":
     create_dirs(run_name)
     save_config(vars(args), run_name)
 
+    # Initialize wandb
     try:
         wandb.init(
             config=vars(args),
@@ -247,30 +260,29 @@ if __name__ == "__main__":
         )
         args.offline = True
 
-    # writer = SummaryWriter(f"{run_name}")
-    # writer.add_text(
-    #     "hyperparameters",
-    #     "|param|value|\n|-|-|\n%s"
-    #     % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-    # )
+    writer = SummaryWriter(f"{run_name}")
+    writer.add_text(
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s"
+        % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+    )
+
+    # Create log files
+    log_file = open(os.path.join((run_name), 'log_file.txt'), 'a', encoding="utf-8")
 
     # ** Hyperparameters Settings **
-    load_mdp_manager = False
-
     n_warmup_episodes = args.n_warmup_episodes
     n_epochs = args.n_epochs
     n_train_episodes = args.n_train_episodes
     n_iter_pmd = args.n_iter_pmd
     n_test_episodes = args.n_test_episodes
     n_subsamples = args.n_subsamples
-
-    save_gif_every = args.save_gif_every
-
     la = args.la
     eta = args.eta
     gamma = args.gamma
 
-    plot_test = True
+    save_gif_every = args.save_gif_every
+    load_mdp_manager = args.load_path
 
     simplify = False
 
@@ -285,9 +297,13 @@ if __name__ == "__main__":
     # ** Seed Settings**
     set_seed(args.seed)
 
-    if load_mdp_manager:
-        with open("saves/mdp_manager.pickle", "rb") as f:
-            mdp_manager = pickle.load(f)
+    # ** Load Settings**
+    if load_mdp_manager is not None:
+        if os.path.exists(f"{args.load_path}/mdp_manager.pickle"):
+            with open(f"{args.load_path}/mdp_manager.pickle", "rb") as f:
+                mdp_manager = pickle.load(f)
+        else:
+            raise ImportError(f"File {args.load_path}/mdp_manager.pickle does not exist.")
     else:
         mdp_manager = FasterNyMDPManager(
             env,
@@ -306,89 +322,75 @@ if __name__ == "__main__":
             else:
                 batch_size = min(int(n_warmup_episodes / 10), 100)
             for i in range(0, n_warmup_episodes, batch_size):
-                print(f"Collecting data: {i}/{n_warmup_episodes}")
                 _, timesteps = mdp_manager.run(
-                    batch_size, plot=False, collect_data=True, seed=args.seed
+                    batch_size, plot=False, collect_data=True
                 )
-                print(f"n_points: {mdp_manager.FTL.n}")
-
                 if simplify:
-                    print("Simplifying")
                     mdp_manager.simplify()
 
-        # # save the state of the system before training using pickle
-        # with open("saves/mdp_manager.pickle", "wb") as f:
-        #     pickle.dump(mdp_manager, f)
-        #
 
     test_results_list = []
     train_results_list = []
     total_timesteps = timesteps
-    for i in range(n_epochs):
+    batch_size = min(10, n_iter_pmd)
+    for i in tqdm(range(n_epochs)):
 
-        t = time.time()
+        start_sampling = time.time()
         mdp_manager.train()
+        t_sampling = time.time() - start_sampling
 
-        batch_size = min(10, n_iter_pmd)
+        start_pmd = time.time()
         for k in range(0, n_iter_pmd, batch_size):
-            print(f"Policy mirror descent: {k}/{n_iter_pmd}")
             mdp_manager.policy_mirror_descent(batch_size)
+        t_pmd = time.time() - start_pmd
+
 
         if n_test_episodes > 0:
-            print("Starting test")
-            test_result = mdp_manager.run(
-                n_test_episodes, plot=False, collect_data=False, seed=args.seed
+            start_test = time.time()
+            test_result, _ = mdp_manager.run(
+                n_test_episodes, plot=False, collect_data=False
             )
-            print("Test results:", test_results_list)
+            t_test = time.time() - start_test
 
-        print("Before", mdp_manager.FTL.n)
-        print(
-            f"Collecting data: {i*n_train_episodes + n_warmup_episodes}/{n_train_episodes*n_epochs + n_warmup_episodes}"
-        )
-
+       
         train_result, timesteps = mdp_manager.run(
-            n_train_episodes, plot=False, collect_data=True, seed=args.seed
+            n_train_episodes, plot=False, collect_data=True
         )
         total_timesteps += timesteps
 
         if simplify:
-            print("Simplifying")
             mdp_manager.simplify()
 
-        print("Saving data ...")
-        global_step = i
-        # Record rewards and data for plotting purposes
-        # writer.add_scalar("test reward", test_result, global_step)
-        # writer.add_scalar("train reward", train_result, global_step)
-        # writer.add_scalar(
-        #     "Sampling and Updating steps",
-        #     n_train_episodes + i * (n_train_episodes + n_iter_pmd),
-        #     global_step,
-        # )
-        # writer.add_scalar("Epoch", i, global_step)
-        # writer.add_scalar(
-        #     "Train Episodes", n_warmup_episodes + i * n_train_episodes, global_step
-        # )
-        # writer.add_scalar("timestep", total_timesteps, global_step)
-        # writer.add_scalar("Epoch and warmup ", i + n_warmup_episodes, global_step)
-        # x massima
-        if i % save_gif_every == 0:
-            _, gif = mdp_manager.run(
-                1, plot=True, collect_data=False, path=run_name, seed=args.seed
+       
+        # ** Save gif **
+        if save_gif_every is not None and i % save_gif_every == 0:
+            mdp_manager.run(
+                1, plot=True, wandb_log = (args.offline != True), collect_data=False, path=run_name, current_epoch=i
             )
 
-            if args.offline is not True:
-                wandb.log(
-                    {"Epoch": global_step, "video": wandb.Video(run_name + "/" + gif)}
-                )
-                # # check if the file exists
-                # if os.path.isfile(run_name+"/"+gif):
-                #     # remove the file
-                #     os.remove(run_name+"/"+gif)
-
         mdp_manager.reset_Q()
-        # mdp_manager.delete_Q_memory()
 
-        # mdp_manager.gamma = min(mdp_manager.gamma*1.1, 0.99)
-        # n_iter_pmd = min(n_iter_pmd*2, 30)
-        # mdp_manager.eta = min(mdp_manager.eta*2, 100)
+        execution_time = time.time() - start_sampling
+
+        # ** Log data **
+        log_epoch_statistics(
+            writer,
+            log_file,
+            i,
+            test_result,
+            train_result,
+            n_train_episodes,
+            n_iter_pmd,
+            n_warmup_episodes,
+            total_timesteps,
+            t_sampling,
+            t_pmd,
+            t_test,
+            execution_time,
+        )
+    
+    # ** Save model **
+    with open(f"{run_name}/mdp_manager.pickle", "wb") as f:
+        pickle.dump(mdp_manager, f)
+    print("Model saved succesfully")
+    
