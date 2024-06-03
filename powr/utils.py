@@ -8,8 +8,6 @@ from tabulate import tabulate
 
 import jax
 import numpy as np
-import torch
-
 
 def get_run_name(args, current_date=None):
     if current_date is None:
@@ -43,9 +41,6 @@ def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
     jax.random.key(seed)
 
 

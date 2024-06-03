@@ -163,3 +163,4 @@ runs/
 tmp/
 tmp*
 wandb/
+./gifs/tmp/
