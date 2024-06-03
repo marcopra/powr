@@ -12,7 +12,7 @@ from pprint import pprint
 import gymnasium as gym
 import jax
 
-from powr._dev_FasterNyMDPManager import FasterNyMDPManager
+from powr.FasterNyMDPManager import FasterNyMDPManager
 from powr.kernels import dirac_kernel, gaussian_kernel, gaussian_kernel_diag
 from powr.utils import create_dirs, get_random_string, save_config, set_seed
 
