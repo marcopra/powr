@@ -16,6 +16,7 @@ Our release is **under construction**, you can track its progress below:
 	- [ ] Optimization
 	- [ ] training
 	- [ ] testing
+	- [ ] Model saving and loading
 - [ ] Reproducing Results
 - [ ] Hyperparameters
 - [ ] Trained models

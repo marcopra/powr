@@ -2,7 +2,6 @@ import os
 import jax
 import time
 import wandb
-import dill as pickle
 import socket
 import argparse
 import warnings
@@ -91,13 +90,6 @@ def parse_args():
         default=[],
         nargs="+",
         help="Tags for wandb run, e.g.: --tags optimized pr-123",
-    )
-    parser.add_argument(
-        "--load-path",
-        default=None,
-        type=str,
-        help="Folder Path for loading model from a previous run",
-       
     )
     parser.add_argument(
         "--offline",
@@ -294,36 +286,29 @@ if __name__ == "__main__":
     # ** Seed Settings**
     set_seed(args.seed)
 
-    # ** Load Settings**
-    if load_mdp_manager is not None:
-        if os.path.exists(f"{args.load_path}/mdp_manager.pickle"):
-            with open(f"{args.load_path}/mdp_manager.pickle", "rb") as f:
-                mdp_manager = pickle.load(f)
-        else:
-            raise ImportError(f"File {args.load_path}/mdp_manager.pickle does not exist.")
-    else:
-        mdp_manager = FasterNyMDPManager(
-            env,
-            eta=eta,
-            la=la,
-            kernel=jit_kernel,
-            gamma=gamma,
-            n_subsamples=n_subsamples,
-            vkernel=v_jit_kernel,
-            seed=args.seed,
-        )
+    # ** MDP manager Settings**
+    mdp_manager = FasterNyMDPManager(
+        env,
+        eta=eta,
+        la=la,
+        kernel=jit_kernel,
+        gamma=gamma,
+        n_subsamples=n_subsamples,
+        vkernel=v_jit_kernel,
+        seed=args.seed,
+    )
 
-        if n_warmup_episodes > 0:
-            if n_warmup_episodes < 10:
-                batch_size = n_warmup_episodes
-            else:
-                batch_size = min(int(n_warmup_episodes / 10), 100)
-            for i in range(0, n_warmup_episodes, batch_size):
-                _, timesteps = mdp_manager.run(
-                    batch_size, plot=False, collect_data=True
-                )
-                if simplify:
-                    mdp_manager.simplify()
+    if n_warmup_episodes > 0:
+        if n_warmup_episodes < 10:
+            batch_size = n_warmup_episodes
+        else:
+            batch_size = min(int(n_warmup_episodes / 10), 100)
+        for i in range(0, n_warmup_episodes, batch_size):
+            _, timesteps = mdp_manager.run(
+                batch_size, plot=False, collect_data=True
+            )
+            if simplify:
+                mdp_manager.simplify()
 
 
     test_results_list = []
@@ -386,8 +371,4 @@ if __name__ == "__main__":
             execution_time,
         )
     
-    # ** Save model **
-    # save the mdp_manager
-    with open(f"{run_name}/mdp_manager.pickle", "wb") as f:
-        pickle.dump(mdp_manager, f)
     
