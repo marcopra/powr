@@ -34,7 +34,6 @@ class FasterNyIncrementalRLS:
         assert self._SUBSAMPLE_HAS_BEEN_CALLED == False
 
     def reset(self):
-
         self.A = None
         self.X = None
         self.Y_transitions = None
@@ -50,6 +49,7 @@ class FasterNyIncrementalRLS:
 
         self._SUBSAMPLE_HAS_BEEN_CALLED = False
 
+    # collect data -> store in memory the data
     def collect_data(self, A, X, Y_transitions, Y_rewards):
 
         if self.n == 0:
@@ -70,6 +70,7 @@ class FasterNyIncrementalRLS:
         if self._SUBSAMPLE_HAS_BEEN_CALLED:
             self.update_kernels(A, X, Y_transitions)
 
+    # update the kernels
     def update_kernels(self, A, X, Y_transitions):
         Knew = self.kernel(jnp.vstack([X, Y_transitions]), self.X_sub)
         self.K_full_sub = jnp.vstack(
@@ -80,8 +81,8 @@ class FasterNyIncrementalRLS:
         )
 
     def simplify(self):
-
         raise NotImplementedError("Not implemented yet")
+
 
     def subsample(self):
 
@@ -142,10 +143,6 @@ class FasterNyIncrementalRLS:
 
         self.r = W[:, -1].reshape(-1, 1)
         self.B = W[:, :-1]
-
-        # tmp_W = jnp.linalg.pinv(self.K_full_sub[a].T @ self.K_full_sub[a] + self.n[a] * self.la * self.K_sub_sub[a])
-        # self.r[a] = tmp_W @ self.K_full_sub[a].T
-        # self.B[a] = tmp_W @ self.K_full_sub[a].T @ self.Y_rewards[a]
 
         # check if the results contain nan
         if jnp.isnan(self.r).any() or jnp.isnan(self.B).any():

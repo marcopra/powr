@@ -1,11 +1,8 @@
-"""
-python3 train_powr.py --env MountainCar-v0 --seed 0 --project powr --la 1e-6 --eta 0.1 --gamma 0.99 --n-train-episodes 1 --n-subsamples 10000 --n-iter-pmd 1 -nwe 1
-"""
 import os
 import jax
 import time
 import wandb
-import pickle
+import dill as pickle
 import socket
 import argparse
 import warnings
@@ -267,7 +264,7 @@ if __name__ == "__main__":
         % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
 
-    # Create log files
+    # Create log file
     log_file = open(os.path.join((run_name), 'log_file.txt'), 'a', encoding="utf-8")
 
     # ** Hyperparameters Settings **
@@ -390,7 +387,7 @@ if __name__ == "__main__":
         )
     
     # ** Save model **
+    # save the mdp_manager
     with open(f"{run_name}/mdp_manager.pickle", "wb") as f:
         pickle.dump(mdp_manager, f)
-    print("Model saved succesfully")
     

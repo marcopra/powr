@@ -1,4 +1,4 @@
-
+import os
 import cv2
 import jax
 import time
@@ -45,6 +45,7 @@ class FasterNyMDPManager:
         self.n_subsamples = n_subsamples
 
         self.env = env
+        # Environment seed
         if seed is not None:
             self.env.reset(seed=seed)
 
@@ -79,6 +80,7 @@ class FasterNyMDPManager:
     def check_data_collected_but_not_trained(self):
         assert not self._DATA_COLLECTED_BUT_NOT_TRAINED
 
+    # Update the Q function
     def update_Q(self):
 
         self.check_data_collected_but_not_trained()
@@ -97,10 +99,7 @@ class FasterNyMDPManager:
         pPit = pPit[:, jnp.arange(self.FTL.n_sub), self.FTL.A_sub]
         f_big_M = jnp.eye(self.FTL.n_sub) - (self.gamma) * self.FTL.B @ pPit
         f_tmp_Q = jnp.linalg.solve(f_big_M, self.FTL.r)
-        
-        current_q_vals = self.FTL.K_transitions_sub @ (f_tmp_Q * self.f_Q_mask)
-        tmp_exp = self.eta * current_q_vals
-       
+               
         self.f_cumQ_weights += f_tmp_Q * self.f_Q_mask
 
     def evaluate_pi(self, state):
@@ -132,6 +131,7 @@ class FasterNyMDPManager:
         p = np.asarray(p).astype("float64")
         p = p.squeeze()
         p = p / p.sum()
+
         try:
             action = np.random.choice(self.n_actions, p=p)
         except:
@@ -139,12 +139,15 @@ class FasterNyMDPManager:
 
         return action, p
 
+    # Delete the Q function from memory
     def delete_Q_memory(self):
         self.f_prev_cumQ_models = []
         self.f_prev_exponents = None
 
+    # Reset the Q function
     def reset_Q(self):
 
+        # Append the current Q function to the list of functions
         self.f_prev_cumQ_models.append(
             FastQmodel(
                 kernel=self.kernel,
@@ -152,13 +155,16 @@ class FasterNyMDPManager:
                 X_sub=self.FTL.X_sub,
             )
         )
-
+    
+        # New transition learner
         new_FTL = FasterNyIncrementalRLS(
             kernel=self.kernel,
             n_actions=self.n_actions,
             la=self.la,
             n_subsamples=self.n_subsamples,
         )
+
+        # Data collection
         new_FTL.collect_data(
             self.FTL.A, self.FTL.X, self.FTL.Y_transitions, self.FTL.Y_rewards
         )
@@ -233,10 +239,14 @@ class FasterNyMDPManager:
                             f_Y_rewards.append(end_reward)
                             f_A.append(action)
 
+                    # save the gif
                     if self.plotting or plot:
                         gif_name = f"{time.time()}-reward-{cum_rewards[episode_id]}.gif"
                         if path is None:
-                            imageio.mimsave(f"./gifs/tmp/{gif_name}", images)
+                            path = "./gifs/tmp"
+                            if os.path.isdir(path) is False:
+                                os.mkdir(path)
+                            imageio.mimsave(f"{path}/{gif_name}", images)
                         else:
                             imageio.mimsave(f"{path}/{gif_name}", images)
 
