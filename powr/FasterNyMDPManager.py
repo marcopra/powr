@@ -33,6 +33,7 @@ class FasterNyMDPManager:
         plotting=False,
         eps_softmax=1e-9,
         vkernel=None,
+        seed=None,
     ):
 
         assert kernel is not None
@@ -44,6 +45,8 @@ class FasterNyMDPManager:
         self.n_subsamples = n_subsamples
 
         self.env = env
+        if seed is not None:
+            self.env.reset(seed=seed)
 
         self.n_actions = self.env.action_space.n
         self.gamma = gamma
@@ -195,7 +198,7 @@ class FasterNyMDPManager:
 
         cum_rewards = np.zeros(n_episodes)
         for episode_id in range(n_episodes):
-            state, info = self.env.reset(seed=seed)  # Important to seed here
+            state, info = self.env.reset()
 
             # truncate the state to its 3rd decimal
             # state[0] = round(state[0], 1)

@@ -40,7 +40,7 @@ pip install -r requirements.txt
 
 
 #### POWR
-- MountainCar: ``
+- MountainCar: `python3 train_powr.py --env MountainCar-v0 --seed 0 --project powr --la 1e-6 --eta 0.1 --gamma 0.99 --n-train-episodes 1 --n-subsamples 10000 --n-iter-pmd 1 -nwe 1`
 - Taxi: ``
 - FrozenLake: ``
 

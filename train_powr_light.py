@@ -210,6 +210,7 @@ if __name__ == "__main__":
             gamma=gamma,
             n_subsamples=n_subsamples,
             vkernel=v_jit_kernel,
+            seed=args.seed,
         )
 
         if n_warmup_episodes > 0:
