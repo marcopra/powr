@@ -6,6 +6,7 @@ import wandb
 import imageio
 import numpy as np
 import jax.numpy as jnp
+import gymnasium as gym
 
 from powr.FastQmodel import FastQmodel
 from powr.FasterNyIncrementalRLS import FasterNyIncrementalRLS
@@ -43,13 +44,20 @@ class FasterNyMDPManager:
         self.kernel = kernel
         self.vkernel = vkernel
         self.n_subsamples = n_subsamples
+        self.one_hot =  False #isinstance(env.observation_space, gym.spaces.Discrete) or isinstance(env.observation_space, gym.spaces.MultiDiscrete)
 
         self.env = env
         # Environment seed
         if seed is not None:
             self.env.reset(seed=seed)
-
+        
         self.n_actions = self.env.action_space.n
+
+        if self.one_hot:
+            self.n_states = self.env.observation_space.n
+            self.state_one_hot = jnp.eye(self.n_states)
+            self.action_one_hot = jnp.eye(self.n_actions)
+
         self.gamma = gamma
         self.eta = eta
         self.la = la
@@ -77,13 +85,21 @@ class FasterNyMDPManager:
             n_subsamples=self.n_subsamples,
         )
 
-    def check_data_collected_but_not_trained(self):
-        assert not self._DATA_COLLECTED_BUT_NOT_TRAINED
+
+    def encode_state_action(self, state=None, action=None):
+        assert state is not None or action is not None
+
+        if not isinstance(state, jnp.ndarray):
+            state = self.state_one_hot[state]
+        if not isinstance(action, jnp.ndarray):
+            action = self.action_one_hot[action]
+
+        return jnp.kron(action, state)
+
+    
 
     # Update the Q function
     def update_Q(self):
-
-        self.check_data_collected_but_not_trained()
 
         assert self.f_cumQ_weights is not None
 
@@ -197,15 +213,28 @@ class FasterNyMDPManager:
                 # save pi from jax vector into a list of floats (truncated at the third decimal)
                 pi = [round(float(p), 3) for p in pi.squeeze()]
 
+
                 new_state, reward, terminated, truncated, info = self.env.step(action)
+                
+
 
                 cum_rewards[episode_id] += reward
 
                 if collect_data:
-                    f_X.append(state)
-                    f_Y_transitions.append(new_state)
-                    f_Y_rewards.append(reward)
-                    f_A.append(action)
+                    if self.one_hot:
+                        encoded_action = self.action_one_hot[action]
+                        encoded_state = self.state_one_hot[state]
+                        encoded_new_state = self.state_one_hot[new_state]
+                        f_X.append(encoded_state)
+                        f_Y_transitions.append(encoded_new_state)
+                        f_Y_rewards.append(reward)
+                        f_A.append(encoded_action)
+                    else:
+
+                        f_X.append(state)
+                        f_Y_transitions.append(new_state)
+                        f_Y_rewards.append(reward)
+                        f_A.append(action)
 
                 # update the state
                 state = new_state
@@ -233,11 +262,18 @@ class FasterNyMDPManager:
                         
                         if collect_data:
                             end_reward = 0
+                            if self.one_hot:
+                                for a in range(self.n_actions):
+                                    f_X.append(encoded_new_state)
+                                    f_Y_transitions.append(encoded_new_state)
+                                    f_Y_rewards.append(end_reward)
+                                    f_A.append(self.action_one_hot[a])
+                            else:
 
-                            f_X.append(new_state)
-                            f_Y_transitions.append(new_state)
-                            f_Y_rewards.append(end_reward)
-                            f_A.append(action)
+                                f_X.append(new_state)
+                                f_Y_transitions.append(new_state)
+                                f_Y_rewards.append(end_reward)
+                                f_A.append(action)
 
                     # save the gif
                     if self.plotting or plot:
@@ -260,6 +296,9 @@ class FasterNyMDPManager:
         if collect_data:
             f_X = jnp.array(f_X)
             f_Y_transitions = jnp.array(f_Y_transitions)
+            if f_X.ndim == 1:
+                f_X = f_X.reshape(-1, 1)
+                f_Y_transitions = f_Y_transitions.reshape(-1, 1)
             f_Y_rewards = jnp.array(f_Y_rewards).reshape(-1, 1)
             f_A = jnp.array(f_A)
 
@@ -267,7 +306,6 @@ class FasterNyMDPManager:
                 f_A, f_X, f_Y_transitions, f_Y_rewards
             )
 
-            self._DATA_COLLECTED_BUT_NOT_TRAINED = True
      
         return cum_rewards.mean(), total_timesteps
 
@@ -280,14 +318,14 @@ class FasterNyMDPManager:
 
         if self.f_cumQ_weights is None and self.FTL.n_sub > 0:
             self.f_cumQ_weights = jnp.zeros((self.FTL.n_sub, self.n_actions))
-            self.f_Q_mask = self.action_one_hot[self.FTL.A_sub]
+            if self.one_hot:
+                self.f_Q_mask = self.FTL.A_sub
+            else:
+                self.f_Q_mask = self.action_one_hot[self.FTL.A_sub]
 
         self.f_prev_exponents = jnp.zeros((self.FTL.n, self.n_actions))
         for model in self.f_prev_cumQ_models:
             self.f_prev_exponents += model.evaluate(self.FTL.Y_transitions)
-
-    
-        self._DATA_COLLECTED_BUT_NOT_TRAINED = False
 
     def policy_mirror_descent(self, n_iter):
 

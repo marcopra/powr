@@ -3,11 +3,8 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import os
 import time
-
-
-@jax.jit
-def dirac_kernel(X, Y):
-    return ((X.reshape(-1, 1) - Y.reshape(1, -1)) == 0) * 1.0
+from powr.kernels import dirac_kernel
+from jax import vmap
 
 
 class FasterNyIncrementalRLS:
@@ -57,8 +54,10 @@ class FasterNyIncrementalRLS:
             self.X = X
             self.Y_transitions = Y_transitions
             self.Y_rewards = Y_rewards
+            print("First It -> self.X=", self.X.shape, " X=", X.shape, " Y_transitions=", Y_transitions.shape, " Y_rewards=", Y_rewards.shape)
 
         else:
+            print("After it -> self.X=", self.X.shape, " X=", X.shape, " Y_transitions=", Y_transitions.shape, " Y_rewards=", Y_rewards.shape)
             # check that the data is provided as a list of arrays one for each possible action
             self.X = jnp.vstack([self.X, X])
             self.Y_transitions = jnp.vstack([self.Y_transitions, Y_transitions])
@@ -72,10 +71,13 @@ class FasterNyIncrementalRLS:
 
     # update the kernels
     def update_kernels(self, A, X, Y_transitions):
+
         Knew = self.kernel(jnp.vstack([X, Y_transitions]), self.X_sub)
+
         self.K_full_sub = jnp.vstack(
             [self.K_full_sub, Knew[: X.shape[0]] * dirac_kernel(A, self.A_sub)]
         )
+
         self.K_transitions_sub = jnp.vstack(
             [self.K_transitions_sub, Knew[X.shape[0] :]]
         )
