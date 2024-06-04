@@ -365,21 +365,21 @@ if __name__ == "__main__":
 
         execution_time = time.time() - start_sampling
 
-        # # ** Log data **
-        # log_epoch_statistics(
-        #     writer,
-        #     log_file,
-        #     i,
-        #     test_result,
-        #     train_result,
-        #     n_train_episodes,
-        #     n_iter_pmd,
-        #     n_warmup_episodes,
-        #     total_timesteps,
-        #     t_sampling,
-        #     t_pmd,
-        #     t_test,
-        #     execution_time,
-        # )
+        # ** Log data **
+        log_epoch_statistics(
+            writer,
+            log_file,
+            i,
+            test_result,
+            train_result,
+            n_train_episodes,
+            n_iter_pmd,
+            n_warmup_episodes,
+            total_timesteps,
+            t_sampling,
+            t_pmd,
+            t_test,
+            execution_time,
+        )
     
     

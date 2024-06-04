@@ -44,7 +44,6 @@ class FasterNyMDPManager:
         self.kernel = kernel
         self.vkernel = vkernel
         self.n_subsamples = n_subsamples
-        self.one_hot =  False #isinstance(env.observation_space, gym.spaces.Discrete) or isinstance(env.observation_space, gym.spaces.MultiDiscrete)
 
         self.env = env
         # Environment seed
@@ -52,11 +51,6 @@ class FasterNyMDPManager:
             self.env.reset(seed=seed)
         
         self.n_actions = self.env.action_space.n
-
-        if self.one_hot:
-            self.n_states = self.env.observation_space.n
-            self.state_one_hot = jnp.eye(self.n_states)
-            self.action_one_hot = jnp.eye(self.n_actions)
 
         self.gamma = gamma
         self.eta = eta
@@ -84,18 +78,6 @@ class FasterNyMDPManager:
             la=self.la,
             n_subsamples=self.n_subsamples,
         )
-
-
-    def encode_state_action(self, state=None, action=None):
-        assert state is not None or action is not None
-
-        if not isinstance(state, jnp.ndarray):
-            state = self.state_one_hot[state]
-        if not isinstance(action, jnp.ndarray):
-            action = self.action_one_hot[action]
-
-        return jnp.kron(action, state)
-
     
 
     # Update the Q function
@@ -111,7 +93,7 @@ class FasterNyMDPManager:
 
         pPit = self.FTL.K_transitions_sub.reshape(
             self.FTL.n, self.FTL.n_sub, 1
-        ) * f_pi.reshape(self.FTL.n, 1, self.n_actions)
+        ) * f_pi.reshape(self.FTL.n, 1, self.n_actions) # qui va out of memory
         pPit = pPit[:, jnp.arange(self.FTL.n_sub), self.FTL.A_sub]
         f_big_M = jnp.eye(self.FTL.n_sub) - (self.gamma) * self.FTL.B @ pPit
         f_tmp_Q = jnp.linalg.solve(f_big_M, self.FTL.r)
@@ -221,20 +203,10 @@ class FasterNyMDPManager:
                 cum_rewards[episode_id] += reward
 
                 if collect_data:
-                    if self.one_hot:
-                        encoded_action = self.action_one_hot[action]
-                        encoded_state = self.state_one_hot[state]
-                        encoded_new_state = self.state_one_hot[new_state]
-                        f_X.append(encoded_state)
-                        f_Y_transitions.append(encoded_new_state)
-                        f_Y_rewards.append(reward)
-                        f_A.append(encoded_action)
-                    else:
-
-                        f_X.append(state)
-                        f_Y_transitions.append(new_state)
-                        f_Y_rewards.append(reward)
-                        f_A.append(action)
+                    f_X.append(state)
+                    f_Y_transitions.append(new_state)
+                    f_Y_rewards.append(reward)
+                    f_A.append(action)
 
                 # update the state
                 state = new_state
@@ -242,13 +214,18 @@ class FasterNyMDPManager:
                 if self.plotting or plot:
                     img = self.env.render()
 
+                    # reduce the font size if the action is pi is too long
+                    if len(str(pi)) > 10:
+                        font_scale = 0.55
+                    else:
+                        font_scale = 1.0
                     # write the action on the right left corner of the image (in green) font 16 and thickness 2
                     img = cv2.putText(
                         img,
                         f"Action: {action} - Pi: {pi}",
                         (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX,
-                        1,
+                        font_scale,
                         (0, 255, 0),
                         2,
                         cv2.LINE_AA,
@@ -262,22 +239,14 @@ class FasterNyMDPManager:
                         
                         if collect_data:
                             end_reward = 0
-                            if self.one_hot:
-                                for a in range(self.n_actions):
-                                    f_X.append(encoded_new_state)
-                                    f_Y_transitions.append(encoded_new_state)
-                                    f_Y_rewards.append(end_reward)
-                                    f_A.append(self.action_one_hot[a])
-                            else:
-
-                                f_X.append(new_state)
-                                f_Y_transitions.append(new_state)
-                                f_Y_rewards.append(end_reward)
-                                f_A.append(action)
+                            f_X.append(new_state)
+                            f_Y_transitions.append(new_state)
+                            f_Y_rewards.append(end_reward)
+                            f_A.append(action)
 
                     # save the gif
                     if self.plotting or plot:
-                        gif_name = f"{time.time()}-reward-{cum_rewards[episode_id]}.gif"
+                        gif_name = f"Epoch={current_epoch}-Reward={cum_rewards[episode_id]}.gif"
                         if path is None:
                             path = "./gifs/tmp"
                             if os.path.isdir(path) is False:
@@ -318,10 +287,7 @@ class FasterNyMDPManager:
 
         if self.f_cumQ_weights is None and self.FTL.n_sub > 0:
             self.f_cumQ_weights = jnp.zeros((self.FTL.n_sub, self.n_actions))
-            if self.one_hot:
-                self.f_Q_mask = self.FTL.A_sub
-            else:
-                self.f_Q_mask = self.action_one_hot[self.FTL.A_sub]
+            self.f_Q_mask = self.action_one_hot[self.FTL.A_sub]
 
         self.f_prev_exponents = jnp.zeros((self.FTL.n, self.n_actions))
         for model in self.f_prev_cumQ_models:
