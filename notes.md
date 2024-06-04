@@ -7,4 +7,4 @@
 - train_powr_light.py *removed*
 
 #### June 04, 2024 @marcopra
-- Tabular Envs work, but taxi run out of memory
+- Tabular Envs work, but *Taxi-v3* runs out of memory
