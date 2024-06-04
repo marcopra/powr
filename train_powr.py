@@ -156,10 +156,14 @@ def get_run_name(args, current_date=None):
         + str(args.eta)
         + "_la"
         + str(args.la)
-        + "_train_samples"
+        + "_train_episodes"
         + str(args.n_train_episodes)
         + "_n_pmd"
         + str(args.n_iter_pmd)
+        + "_gamma"
+        + str(args.gamma)
+        + "_sigma"
+        + str(args.sigma)
         + "_seed"
         + str(args.seed)
         + "_"
@@ -203,10 +207,14 @@ if __name__ == "__main__":
             + str(args.eta)
             + "_la"
             + str(args.la)
-            + "_train_samples"
+            + "_train_episodes"
             + str(args.n_train_episodes)
             + "_n_pmd"
             + str(args.n_iter_pmd)
+            + "_gamma"
+            + str(args.gamma)
+            + "_sigma"
+            + str(args.sigma)
             + "_seed"
             + str(args.seed)
             + "_"
@@ -232,10 +240,14 @@ if __name__ == "__main__":
             + str(args.eta)
             + "_la"
             + str(args.la)
-            + "_train_samples"
+            + "_train_episodes"
             + str(args.n_train_episodes)
             + "_n_pmd"
             + str(args.n_iter_pmd)
+            + "_gamma"
+            + str(args.gamma)
+            + "_sigma"
+            + str(args.sigma)
             + "_seed"
             + str(args.seed)
             + "_"
@@ -353,7 +365,7 @@ if __name__ == "__main__":
 
         execution_time = time.time() - start_sampling
 
-        # ** Log data **
+        # # ** Log data **
         log_epoch_statistics(
             writer,
             log_file,

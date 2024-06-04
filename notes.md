@@ -3,5 +3,5 @@ Why in the function `FasterNyMDPManager.run` we always reset the environment at 
 
 #### June 03, 2024 @marcopra
 Seed solved
-Saving **not** working
+Saving **not** working and temporary *removed*
 train_powr_light.py *removed*
