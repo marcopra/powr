@@ -109,7 +109,7 @@ class FasterNyMDPManager:
 
         exponent = (
             self.eta
-            * self.FTL.kernel(jnp.array(state).reshape(1, -1), self.FTL.X_sub)
+            * self.FTL.kernel(jnp.array(state).reshape(1, -1), self.FTL.X_sub) # TODO Controllare azioni
             @ self.f_cumQ_weights
         )
         for model in self.f_prev_cumQ_models:
