@@ -5,6 +5,7 @@ import gymnasium as gym
 from jax import vmap   
 import jax.numpy as jnp
 from jax.nn import softmax 
+from jax.scipy.linalg import cho_factor, cho_solve
 
     
 # define a one hot encoding function
@@ -50,6 +51,8 @@ class pi:
         self.Qs_weights = []
         self.Qs_weights.append((jnp.ones(self.n_actions) / self.n_actions))
         self.f_prev_cumQ_models = []
+        self.H = None
+        self.C = None
     
     def evaluate(self, state):
 
@@ -72,11 +75,16 @@ class pi:
             raise ValueError("Error: NaN in the results of the training")
 
         return pi
+    
+    def update(self, H, C):
+        self.H = H
+        self.C = C
+        
         
 
+
     
-    
-def collect_data(env, pi, n_episodes):
+def collect_data(env, n_episodes):
             states = []
             next_states = []
             actions = []
@@ -95,7 +103,11 @@ def collect_data(env, pi, n_episodes):
 
                     done = terminated or truncated
                     state = next_state 
-            return states, next_states, actions, rewards
+            states = jnp.array(states)
+            next_states = jnp.array(next_states)
+            actions = jnp.array(actions)
+            rewards = jnp.array(rewards)
+            return states.reshape(-1, states.shape[1]), jnp.array(next_states).reshape(-1, next_states.shape[1]), jnp.array(actions), jnp.array(rewards).reshape(-1, 1)
 
 if __name__ == '__main__':
     # define a <env> environment from the gymnasium library
@@ -107,19 +119,22 @@ if __name__ == '__main__':
 
 
     n_actions = env.action_space.n
-    n_episodes = 10
+    n_episodes = 1
     n_epochs = 1
 
     for epoch in range(n_epochs):
 
         # loop over episodes
-        # collect data (state, action, next_state, reward) in replay buffer
+        # collect data (state, action, next_state, reward) from the environment
         states, next_states, actions, rewards = collect_data(env, n_episodes)
 
-        H = k(next_states, states)
+        H = k(states, next_states)
         K = k(states, states)*delta(actions, actions)
-        B = jax.lax.linalg.inv(K + la*jnp.eye())
+        # Compute the inverse using the Cholesky factor
+        B_inv = K + la*jnp.eye(K.shape[1])
+        B = cho_solve(cho_factor(B_inv), jnp.eye(B_inv.shape[1]))
 
+        b = B @ rewards
+        print(b.shape)
+        exit()
        
-
-        
