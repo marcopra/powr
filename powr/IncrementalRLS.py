@@ -1,13 +1,15 @@
+import os
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
-import os
-import time
+
 from powr.kernels import dirac_kernel
-from jax import vmap
 
 
-class FasterNyIncrementalRLS:
+
+
+
+class IncrementalRLS:
     def __init__(self, kernel=None, n_actions=None, la=1e-3, n_subsamples=None):
 
         assert kernel is not None
@@ -23,6 +25,11 @@ class FasterNyIncrementalRLS:
         # reset stuff
         self.n = 0
         self.n_sub = None
+        self.n_components = 1000
+
+        self.MAX_ABOVE_THRESHOLD = 8 # TODO: find a new effective strategy to early stop the collection
+        self.above_threshold_count = 0
+        self.stop_collection = False
 
         self.reset()
 
@@ -31,10 +38,7 @@ class FasterNyIncrementalRLS:
         assert self._SUBSAMPLE_HAS_BEEN_CALLED == False
 
     def reset(self):
-        self.A = None
-        self.X = None
-        self.Y_transitions = None
-        self.Y_rewards = None
+
         self.X_sub = None
         self.A_sub = None
 
@@ -44,10 +48,27 @@ class FasterNyIncrementalRLS:
 
         self.sub_indices = None
 
+        self.n_sub = None
+        self.n_components = 1000
+
         self._SUBSAMPLE_HAS_BEEN_CALLED = False
 
     # collect data -> store in memory the data
-    def collect_data(self, A, X, Y_transitions, Y_rewards):
+    def collect_data(self, A, X, Y_transitions, Y_rewards, above_threshold = False, seed = None, reward= None):
+
+        if self.stop_collection is False:
+            
+            if above_threshold:
+                self.above_threshold_count += 1 
+            else: 
+                self.above_threshold_count = 0
+            print(f"above_threshold_count: {self.above_threshold_count}")
+            if self.above_threshold_count >= self.MAX_ABOVE_THRESHOLD:
+                self.stop_collection = True
+                print("Stop collection - len of Dataset: ", self.n)
+                # save into a file the lenght of self.X
+                with open(f"dataset_lenght_{seed}.txt", "w") as f:
+                    f.write(str(self.n))
 
         if self.n == 0:
             self.A = A
@@ -56,26 +77,26 @@ class FasterNyIncrementalRLS:
             self.Y_rewards = Y_rewards
 
         else:
+            
+            if not self.stop_collection:
             # check that the data is provided as a list of arrays one for each possible action
-            self.X = jnp.vstack([self.X, X])
-            self.Y_transitions = jnp.vstack([self.Y_transitions, Y_transitions])
-            self.Y_rewards = jnp.vstack([self.Y_rewards, Y_rewards])
-            self.A = jnp.hstack([self.A, A])
+                self.X = jnp.vstack([self.X, X])
+                self.Y_transitions = jnp.vstack([self.Y_transitions, Y_transitions])
+                self.Y_rewards = jnp.vstack([self.Y_rewards, Y_rewards])
+                self.A = jnp.hstack([self.A, A])
+                
+                if self._SUBSAMPLE_HAS_BEEN_CALLED:
+                    self.update_kernels(A, X, Y_transitions)
 
         self.n = self.X.shape[0]
-
-        if self._SUBSAMPLE_HAS_BEEN_CALLED:
-            self.update_kernels(A, X, Y_transitions)
+        
 
     # update the kernels
     def update_kernels(self, A, X, Y_transitions):
-
         Knew = self.kernel(jnp.vstack([X, Y_transitions]), self.X_sub)
-
         self.K_full_sub = jnp.vstack(
             [self.K_full_sub, Knew[: X.shape[0]] * dirac_kernel(A, self.A_sub)]
         )
-
         self.K_transitions_sub = jnp.vstack(
             [self.K_transitions_sub, Knew[X.shape[0] :]]
         )
@@ -118,6 +139,10 @@ class FasterNyIncrementalRLS:
         if not self._SUBSAMPLE_HAS_BEEN_CALLED:
             self.subsample()
 
+        V, W = jax.lax.linalg.eigh(self.K_sub_sub)
+        effective_components = min(self.K_sub_sub.shape[0], self.n_components)
+        self.V = V[:, -effective_components : ].T
+
         L = jax.lax.linalg.cholesky(
             self.K_full_sub.T @ self.K_full_sub
             + self.n * self.la * self.K_sub_sub
@@ -147,3 +172,27 @@ class FasterNyIncrementalRLS:
         # check if the results contain nan
         if jnp.isnan(self.r).any() or jnp.isnan(self.B).any():
             raise ValueError("Error: NaN in the results of the training")
+
+    def __getstate__(self):
+        """ Prepare the object for pickling by returning necessary attributes. """
+        return {
+            'n': self.n,
+            'n_sub': self.n_sub,
+            'above_threshold_count': self.above_threshold_count,
+            'stop_collection': self.stop_collection,
+            'A': self.A,
+            'X': self.X,
+            'Y_transitions': self.Y_transitions,
+            'Y_rewards': self.Y_rewards,
+        }
+
+    def __setstate__(self, state):
+        """ Restore the object's state. """
+        self.n = state['n']
+        self.n_sub = state['n_sub']
+        self.above_threshold_count = state['above_threshold_count']
+        self.stop_collection = state['stop_collection']
+        self.A = state['A']
+        self.X = state['X']
+        self.Y_transitions = state['Y_transitions']
+        self.Y_rewards = state['Y_rewards']

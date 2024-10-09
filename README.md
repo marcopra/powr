@@ -1,8 +1,8 @@
 # POWR: Operator World Models for Reinforcement Learning
 
-[Paper]() / [Website]() 
+[Paper](https://arxiv.org/pdf/2406.19861)
 
-##### name1, name2, name3, name4
+##### [Pietro Novelli](), [Marco Pratticò](), [Carlo Ciliberto](), [Massimiliano Pontil]()
 
 This repository contains the code for the paper "Operator World Models for Reinforcement Learning".
 
@@ -15,8 +15,9 @@ Our release is **under construction**, you can track its progress below:
 - [ ] Code implementation
 	- [x] Training
 	- [x] Testing
-	- [ ] Optimization
-	- [ ] Model saving and loading
+	- [x] Optimization
+	- [x] Model saving and loading
+	- [] Cleaning
 - [ ] Reproducing Results Scripts
 - [ ] Hyperparameters for each env
 - [ ] Trained models
@@ -31,15 +32,23 @@ conda activate powr
 pip install -r requirements.txt
 ```
 
-2. (optional) set up `wandb login` with your WeightsAndBiases account. If you do not wish to use wandb to track the experiment results, run it offline adding the following arg `--offline`. For example, `python3 train_powr.py --offline`
+2. (optional) set up `wandb login` with your WeightsAndBiases account. If you do not wish to use wandb to track the experiment results, run it offline adding the following arg `--offline`. For example, `python3 train.py --offline`
 
 ## Getting started
 
 ### Quick test
-- `python3 train_powr.py`
+- `python3 train.py`
 
 ## Cite us
 If you use this repository, please consider citing
 ```
-
+@misc{novelli2024operatorworldmodelsreinforcement,
+      title={Operator World Models for Reinforcement Learning}, 
+      author={Pietro Novelli and Marco Pratticò and Massimiliano Pontil and Carlo Ciliberto},
+      year={2024},
+      eprint={2406.19861},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2406.19861}, 
+}
 ```

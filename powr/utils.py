@@ -5,9 +5,46 @@ import socket
 import string
 from datetime import datetime
 from tabulate import tabulate
+import wandb
+import pickle
 
 import jax
 import numpy as np
+
+def save_checkpoint(run_name, args, total_timesteps, epoch, mdp_manager):
+    checkpoint_data = {
+        "args": vars(args),  # Save arguments
+        "total_timesteps": total_timesteps,  # Save total timesteps
+        "epoch": epoch,  # Save epoch
+        "wandb_run_id": wandb.run.id,  # Save Wandb run ID
+        "run_name": run_name,  # Save run name for consistent logging
+    }
+    
+    # Save checkpoint data
+    checkpoint_file = os.path.join(run_name, "checkpoint.pkl")
+    with open(checkpoint_file, "wb") as f:
+        pickle.dump(checkpoint_data, f)
+    
+    # Save the entire mdp_manager object separately
+    mdp_manager_file = os.path.join(run_name, "mdp_manager.pkl")
+    mdp_manager.save_checkpoint(mdp_manager_file)
+    
+    
+    print(f"Checkpoint and mdp_manager saved at {run_name}")
+
+
+
+def load_checkpoint(run_name):
+    # Load checkpoint data
+    checkpoint_file = os.path.join(run_name, "checkpoint.pkl")
+    with open(checkpoint_file, "rb") as f:
+        checkpoint_data = pickle.load(f)
+    
+    
+    print(f"Checkpoint and mdp_manager loaded from {run_name}")
+    
+    return checkpoint_data
+
 
 def get_run_name(args, current_date=None):
     if current_date is None:
@@ -65,39 +102,31 @@ def save_config(config, path):
     return
 
 
-def get_learning_rate(args, env):
-    """
-    Priority:
-        args.lr > env.preferred_lr > 0.0003 (default)
-    """
-    if args.lr is None:
-        if env.get_attr("preferred_lr")[0] is None:
-            return 0.0003
-        else:
-            return env.get_attr("preferred_lr")[0]
-    else:
-        return args.lr
-
-
 def log_epoch_statistics(writer, log_file, epoch, test_result, train_result, n_train_episodes,
                          n_iter_pmd, n_warmup_episodes, total_timesteps, 
-                         t_sampling, t_pmd, t_test, execution_time
+                         t_sampling, t_training, t_pmd, t_test, execution_time
                          ):
     # Log to Tensorboard
     global_step = epoch
-    writer.add_scalar("test reward", test_result, global_step)
+
+    if test_result is not None:
+        writer.add_scalar("test reward", test_result, global_step)
     writer.add_scalar("train reward", train_result, global_step)
     writer.add_scalar(
         "Sampling and Updating steps",
-        n_train_episodes + epoch * (n_train_episodes + n_iter_pmd),
+        n_warmup_episodes + epoch * (n_train_episodes + n_iter_pmd),
         global_step,
     )
     writer.add_scalar("Epoch", epoch, global_step)
-    writer.add_scalar(
-        "Train Episodes", n_warmup_episodes + epoch * n_train_episodes, global_step
-    )
+    writer.add_scalar("Train Episodes", n_warmup_episodes + epoch * n_train_episodes, global_step)
     writer.add_scalar("timestep", total_timesteps, global_step)
-    writer.add_scalar("Epoch and warmup ", epoch + n_warmup_episodes, global_step)
+    writer.add_scalar("Epoch and Warmup ", epoch + n_warmup_episodes, global_step)
+    writer.add_scalar("Sampling Time", t_sampling, global_step)
+    writer.add_scalar("Training Time", t_training, global_step)
+    writer.add_scalar("PMD Time", t_pmd, global_step)
+    if t_test is not None:
+        writer.add_scalar("Test Time", t_test, global_step)
+    writer.add_scalar("Execution Time", execution_time, global_step)
 
     # Prepare tabulate table
     table = []
@@ -105,11 +134,26 @@ def log_epoch_statistics(writer, log_file, epoch, test_result, train_result, n_t
     table.extend([
         ["Epoch", epoch],
         ["Train reward", fancy_float(train_result)],
-        ["Test reward", fancy_float(test_result)],
+    ])
+    
+    if test_result is not None:
+        table.extend([
+            ["Test reward", fancy_float(test_result)],
+        ])
+    
+    table.extend([
         ["Total timesteps", total_timesteps],
         ["Sampling time (s)", fancy_float(t_sampling)],
-        ["PMD time (s)", fancy_float(t_pmd)],
-        ["Test time (s)", fancy_float(t_test)],
+        ["Training time (s)", fancy_float(t_training)],
+        ["PMD time (s)", fancy_float(t_pmd)],])
+    
+    if t_test is not None:
+        assert test_result is not None
+        table.extend([
+            ["Test time (s)", fancy_float(t_test)],
+        ])
+
+    table.extend([
         ["Execution time (s)", fancy_float(execution_time)],
     ])
 

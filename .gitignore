@@ -164,3 +164,6 @@ tmp/
 tmp*
 wandb/
 ./gifs/tmp/
+data
+*.o*
+fig/

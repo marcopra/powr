@@ -1,11 +1,11 @@
 import jax
 import jax.numpy as jnp
-from jax import vmap
 
 # compute the dirac kernel on batches of states
-@jax.jit
+@jax.jit    
 def dirac_kernel(X, Y):
-    return vmap(lambda x: vmap(lambda y: jnp.where(jnp.all(x == y), 1.0, 0.0))(Y))(X)
+    return ((X.reshape(-1, 1) - Y.reshape(1, -1)) == 0) * 1.0
+
 
 # gaussian kernel for matrices of n points and d dimensions
 class gaussian_kernel:
@@ -48,3 +48,11 @@ class abel_kernel_diag:
                 axis=2,
             )
         )
+    
+class softmax:
+
+    def __init__(self):
+        pass
+
+    def __call__(self, x):
+        return jax.nn.softmax(x, axis=1)
